@@ -10,8 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jolks/mcp-cron/internal/agent"
-	"github.com/jolks/mcp-cron/internal/command"
 	"github.com/jolks/mcp-cron/internal/config"
 	"github.com/jolks/mcp-cron/internal/logging"
 	"github.com/jolks/mcp-cron/internal/scheduler"
@@ -110,36 +108,26 @@ func applyCommandLineFlagsToConfig(cfg *config.Config) {
 
 // Application represents the running application
 type Application struct {
-	scheduler     *scheduler.Scheduler
-	cmdExecutor   *command.CommandExecutor
-	agentExecutor *agent.AgentExecutor
-	server        *server.MCPServer
-	logger        *logging.Logger
+	scheduler *scheduler.Scheduler
+	server    *server.MCPServer
+	logger    *logging.Logger
 }
 
 // createApp creates a new application instance
 func createApp(cfg *config.Config) (*Application, error) {
-	// Create components
-	cmdExec := command.NewCommandExecutor()
-	agentExec := agent.NewAgentExecutor(cfg)
 	sched := scheduler.NewScheduler(&cfg.Scheduler)
 
-	// Create the MCP server
-	mcpServer, err := server.NewMCPServer(cfg, sched, cmdExec, agentExec)
+	mcpServer, err := server.NewMCPServer(cfg, sched)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get the default logger that was configured by the server
 	logger := logging.GetDefaultLogger()
 
-	// Create the application
 	app := &Application{
-		scheduler:     sched,
-		cmdExecutor:   cmdExec,
-		agentExecutor: agentExec,
-		server:        mcpServer,
-		logger:        logger,
+		scheduler: sched,
+		server:    mcpServer,
+		logger:    logger,
 	}
 
 	return app, nil

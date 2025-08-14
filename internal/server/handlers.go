@@ -96,36 +96,10 @@ func createTasksResponse(tasks []*model.Task) (*protocol.CallToolResult, error) 
 	}, nil
 }
 
-// validateTaskParams validates the common task parameters
-func validateTaskParams(name, schedule string) error {
-	if name == "" || schedule == "" {
-		return errors.InvalidInput("missing required fields: name and schedule are required")
+// validateCreateTaskParams validates parameters for creating a task
+func validateCreateTaskParams(cron, name, instruction string) error {
+	if cron == "" || name == "" || instruction == "" {
+		return errors.InvalidInput("missing required fields: cron, task_name and instruction are required")
 	}
-	return nil
-}
-
-// validateShellTaskParams validates the parameters specific to shell tasks
-func validateShellTaskParams(name, schedule, command string) error {
-	if err := validateTaskParams(name, schedule); err != nil {
-		return err
-	}
-
-	if command == "" {
-		return errors.InvalidInput("missing required field: command is required for shell tasks")
-	}
-
-	return nil
-}
-
-// validateAITaskParams validates the parameters specific to AI tasks
-func validateAITaskParams(name, schedule, prompt string) error {
-	if err := validateTaskParams(name, schedule); err != nil {
-		return err
-	}
-
-	if prompt == "" {
-		return errors.InvalidInput("missing required field: prompt is required for AI tasks")
-	}
-
 	return nil
 }

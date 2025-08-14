@@ -6,17 +6,8 @@ import (
 	"time"
 )
 
-// TaskType defines the types of tasks that can be executed
-type TaskType string
-
 // TaskStatus represents the current status of a task
 type TaskStatus string
-
-// Task types
-const (
-	TypeShellCommand TaskType = "shell_command"
-	TypeAI           TaskType = "AI"
-)
 
 // Task status constants
 const (
@@ -32,38 +23,39 @@ const (
 	StatusDisabled TaskStatus = "disabled"
 )
 
-// String returns the string representation of the type, making it easier to use in string contexts
-func (t TaskType) String() string {
-	return string(t)
-}
-
 // String returns the string representation of the status, making it easier to use in string contexts
 func (s TaskStatus) String() string {
 	return string(s)
 }
 
+// FileRef represents a file reference for task context
+type FileRef struct {
+	Path        string `json:"path"`
+	Description string `json:"description"`
+}
+
 // Task represents a scheduled task
 type Task struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Command     string     `json:"command,omitempty" description:"command for shell"`
-	Prompt      string     `json:"prompt,omitempty" description:"prompt to use for AI"`
-	Schedule    string     `json:"schedule"`
-	Enabled     bool       `json:"enabled"`
-	Type        string     `json:"type"`
-	LastRun     time.Time  `json:"lastRun,omitempty"`
-	NextRun     time.Time  `json:"nextRun,omitempty"`
-	Status      TaskStatus `json:"status"`
-	CreatedAt   time.Time  `json:"createdAt,omitempty"`
-	UpdatedAt   time.Time  `json:"updatedAt,omitempty"`
+	ID                   string     `json:"id"`
+	Name                 string     `json:"name"`
+	Description          string     `json:"description"`
+	Schedule             string     `json:"schedule"`
+	Instruction          string     `json:"instruction"`
+	TaskType             string     `json:"task_type"`
+	RelevantChatSnippets []string   `json:"relevant_chat_snippets,omitempty"`
+	FileContext          []FileRef  `json:"file_context,omitempty"`
+	RawInput             string     `json:"raw_input,omitempty"`
+	Enabled              bool       `json:"enabled"`
+	LastRun              time.Time  `json:"lastRun,omitempty"`
+	NextRun              time.Time  `json:"nextRun,omitempty"`
+	Status               TaskStatus `json:"status"`
+	CreatedAt            time.Time  `json:"createdAt,omitempty"`
+	UpdatedAt            time.Time  `json:"updatedAt,omitempty"`
 }
 
 // Result contains the results of a task execution
 type Result struct {
 	TaskID    string    `json:"task_id"`
-	Command   string    `json:"command,omitempty" description:"command for shell"`
-	Prompt    string    `json:"prompt,omitempty" description:"prompt to use for AI"`
 	Output    string    `json:"output"`
 	Error     string    `json:"error,omitempty"`
 	ExitCode  int       `json:"exit_code"`
