@@ -96,6 +96,7 @@ func TestHandleCreateTask(t *testing.T) {
 	params := CreateTaskParams{
 		Cron:        "* * * * *",
 		TaskName:    "test_task",
+		SessionID:   "chat-test",
 		Instruction: "do something",
 	}
 	rawParams, err := json.Marshal(params)

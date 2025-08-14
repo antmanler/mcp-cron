@@ -92,12 +92,13 @@ func TestExecuteRemovesOneTimeTask(t *testing.T) {
 	srv := &MCPServer{scheduler: sched}
 
 	task := &model.Task{
-		ID:       "task1",
-		Name:     "chat1",
-		Schedule: "* * * * *",
-		RawInput: "{\"foo\":\"bar\"}",
-		TaskType: "ONCE",
-		Enabled:  false,
+		ID:        "task1",
+		Name:      "chat1",
+		SessionID: "chat1",
+		Schedule:  "* * * * *",
+		RawInput:  "{\"foo\":\"bar\"}",
+		TaskType:  "ONCE",
+		Enabled:   false,
 	}
 	if err := sched.AddTask(task); err != nil {
 		t.Fatalf("AddTask: %v", err)
@@ -128,12 +129,13 @@ func TestExecuteKeepsPeriodicTask(t *testing.T) {
 	srv := &MCPServer{scheduler: sched}
 
 	task := &model.Task{
-		ID:       "task2",
-		Name:     "chat2",
-		Schedule: "* * * * *",
-		RawInput: "{\"foo\":\"baz\"}",
-		TaskType: "PERIODICALLY",
-		Enabled:  false,
+		ID:        "task2",
+		Name:      "chat2",
+		SessionID: "chat2",
+		Schedule:  "* * * * *",
+		RawInput:  "{\"foo\":\"baz\"}",
+		TaskType:  "PERIODICALLY",
+		Enabled:   false,
 	}
 	if err := sched.AddTask(task); err != nil {
 		t.Fatalf("AddTask: %v", err)

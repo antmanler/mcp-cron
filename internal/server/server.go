@@ -43,6 +43,7 @@ type CreateTaskParams struct {
 	Cron                 string             `json:"cron" description:"cron expression"`
 	TaskType             string             `json:"task_type,omitempty" description:"ONCE or PERIODICALLY"`
 	TaskName             string             `json:"task_name" description:"task name"`
+	SessionID            string             `json:"session_id" description:"session id (chat id)"`
 	Instruction          string             `json:"instruction" description:"task instruction"`
 	RelevantChatSnippets []string           `json:"relevant_chat_snippets,omitempty"`
 	FileContext          []FileContextParam `json:"file_context,omitempty"`
@@ -264,7 +265,7 @@ func (s *MCPServer) handleCreateTask(ctx context.Context, request *protocol.Call
 	}
 
 	// Validate parameters
-	if err := validateCreateTaskParams(params.Cron, params.TaskName, params.Instruction); err != nil {
+	if err := validateCreateTaskParams(params.Cron, params.TaskName, params.Instruction, params.SessionID); err != nil {
 		return createErrorResponse(err)
 	}
 
@@ -274,6 +275,7 @@ func (s *MCPServer) handleCreateTask(ctx context.Context, request *protocol.Call
 	task := createBaseTask(params.TaskName, params.Cron, "", true)
 	task.Instruction = params.Instruction
 	task.TaskType = params.TaskType
+	task.SessionID = params.SessionID
 	task.RelevantChatSnippets = params.RelevantChatSnippets
 	for _, fc := range params.FileContext {
 		task.FileContext = append(task.FileContext, model.FileRef{Path: fc.Path, Description: fc.Description})
@@ -376,7 +378,12 @@ func (s *MCPServer) handleDisableTask(ctx context.Context, request *protocol.Cal
 // Execute implements the model.Executor interface by sending a message to the local server
 func (s *MCPServer) Execute(ctx context.Context, task *model.Task, timeout time.Duration) error {
 	content := fmt.Sprintf("@Duoduo 系统触发定时任务，按照下面指令执行:\n\n%s", task.RawInput)
-	if err := sendMessageToLocalServer(ctx, task.Name, content); err != nil {
+	// Prefer SessionID if available; fall back to Name for backward compatibility
+	chatID := task.SessionID
+	if chatID == "" {
+		chatID = task.Name
+	}
+	if err := sendMessageToLocalServer(ctx, chatID, content); err != nil {
 		return err
 	}
 

@@ -38,6 +38,7 @@ type FileRef struct {
 type Task struct {
 	ID                   string     `json:"id"`
 	Name                 string     `json:"name"`
+	SessionID            string     `json:"session_id,omitempty"`
 	Description          string     `json:"description"`
 	Schedule             string     `json:"schedule"`
 	Instruction          string     `json:"instruction"`

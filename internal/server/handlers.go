@@ -97,9 +97,9 @@ func createTasksResponse(tasks []*model.Task) (*protocol.CallToolResult, error) 
 }
 
 // validateCreateTaskParams validates parameters for creating a task
-func validateCreateTaskParams(cron, name, instruction string) error {
-	if cron == "" || name == "" || instruction == "" {
-		return errors.InvalidInput("missing required fields: cron, task_name and instruction are required")
+func validateCreateTaskParams(cron, name, instruction, sessionID string) error {
+	if cron == "" || name == "" || instruction == "" || sessionID == "" {
+		return errors.InvalidInput("missing required fields: cron, task_name, instruction and session_id are required")
 	}
 	return nil
 }
