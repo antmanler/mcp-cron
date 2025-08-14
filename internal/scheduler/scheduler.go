@@ -14,7 +14,7 @@ import (
 )
 
 // Scheduler manages cron tasks
-type Scheduler struct {
+type cronScheduler struct {
 	cron         *cron.Cron
 	tasks        map[string]*model.Task
 	entryIDs     map[string]cron.EntryID
@@ -24,7 +24,7 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new scheduler instance
-func NewScheduler(cfg *config.SchedulerConfig) *Scheduler {
+func NewScheduler(cfg *config.SchedulerConfig) Scheduler {
 	cronOpts := cron.New(
 		cron.WithParser(cron.NewParser(
 			cron.SecondOptional|cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow|cron.Descriptor)),
@@ -33,7 +33,7 @@ func NewScheduler(cfg *config.SchedulerConfig) *Scheduler {
 		),
 	)
 
-	scheduler := &Scheduler{
+	scheduler := &cronScheduler{
 		cron:     cronOpts,
 		tasks:    make(map[string]*model.Task),
 		entryIDs: make(map[string]cron.EntryID),
@@ -44,7 +44,7 @@ func NewScheduler(cfg *config.SchedulerConfig) *Scheduler {
 }
 
 // Start begins the scheduler
-func (s *Scheduler) Start(ctx context.Context) {
+func (s *cronScheduler) Start(ctx context.Context) {
 	s.cron.Start()
 
 	// Listen for context cancellation to stop the scheduler
@@ -59,13 +59,13 @@ func (s *Scheduler) Start(ctx context.Context) {
 }
 
 // Stop halts the scheduler
-func (s *Scheduler) Stop() error {
+func (s *cronScheduler) Stop() error {
 	s.cron.Stop()
 	return nil
 }
 
 // AddTask adds a new task to the scheduler
-func (s *Scheduler) AddTask(task *model.Task) error {
+func (s *cronScheduler) AddTask(task *model.Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -89,7 +89,7 @@ func (s *Scheduler) AddTask(task *model.Task) error {
 }
 
 // RemoveTask removes a task from the scheduler
-func (s *Scheduler) RemoveTask(taskID string) error {
+func (s *cronScheduler) RemoveTask(taskID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -111,7 +111,7 @@ func (s *Scheduler) RemoveTask(taskID string) error {
 }
 
 // EnableTask enables a disabled task
-func (s *Scheduler) EnableTask(taskID string) error {
+func (s *cronScheduler) EnableTask(taskID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -138,7 +138,7 @@ func (s *Scheduler) EnableTask(taskID string) error {
 }
 
 // DisableTask disables a running task
-func (s *Scheduler) DisableTask(taskID string) error {
+func (s *cronScheduler) DisableTask(taskID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -164,7 +164,7 @@ func (s *Scheduler) DisableTask(taskID string) error {
 }
 
 // GetTask retrieves a task by ID
-func (s *Scheduler) GetTask(taskID string) (*model.Task, error) {
+func (s *cronScheduler) GetTask(taskID string) (*model.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -177,7 +177,7 @@ func (s *Scheduler) GetTask(taskID string) (*model.Task, error) {
 }
 
 // ListTasks returns all tasks
-func (s *Scheduler) ListTasks() []*model.Task {
+func (s *cronScheduler) ListTasks() []*model.Task {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -190,7 +190,7 @@ func (s *Scheduler) ListTasks() []*model.Task {
 }
 
 // UpdateTask updates an existing task
-func (s *Scheduler) UpdateTask(task *model.Task) error {
+func (s *cronScheduler) UpdateTask(task *model.Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -220,7 +220,7 @@ func (s *Scheduler) UpdateTask(task *model.Task) error {
 }
 
 // SetTaskExecutor sets the executor to be used for task execution
-func (s *Scheduler) SetTaskExecutor(executor model.Executor) {
+func (s *cronScheduler) SetTaskExecutor(executor model.Executor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.taskExecutor = executor
@@ -238,7 +238,7 @@ func NewTask() *model.Task {
 }
 
 // scheduleTask adds a task to the cron scheduler (internal method)
-func (s *Scheduler) scheduleTask(task *model.Task) error {
+func (s *cronScheduler) scheduleTask(task *model.Task) error {
 	// Ensure we have a task executor
 	if s.taskExecutor == nil {
 		return fmt.Errorf("cannot schedule task: no task executor set")
@@ -277,7 +277,7 @@ func (s *Scheduler) scheduleTask(task *model.Task) error {
 }
 
 // updateNextRunTime updates the task's next run time based on its cron entry
-func (s *Scheduler) updateNextRunTime(task *model.Task) {
+func (s *cronScheduler) updateNextRunTime(task *model.Task) {
 	if entryID, exists := s.entryIDs[task.ID]; exists {
 		entries := s.cron.Entries()
 		for _, entry := range entries {

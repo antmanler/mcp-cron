@@ -50,7 +50,7 @@ type CreateTaskParams struct {
 
 // MCPServer represents the MCP scheduler server
 type MCPServer struct {
-	scheduler      *scheduler.Scheduler
+	scheduler      scheduler.Scheduler
 	server         *server.Server
 	address        string
 	port           int
@@ -63,7 +63,7 @@ type MCPServer struct {
 }
 
 // NewMCPServer creates a new MCP scheduler server
-func NewMCPServer(cfg *config.Config, scheduler *scheduler.Scheduler) (*MCPServer, error) {
+func NewMCPServer(cfg *config.Config, scheduler scheduler.Scheduler) (*MCPServer, error) {
 	// Create default config if not provided
 	if cfg == nil {
 		cfg = config.DefaultConfig()
@@ -227,7 +227,7 @@ func (s *MCPServer) Stop() error {
 }
 
 // handleListTasks lists all tasks
-func (s *MCPServer) handleListTasks(_ *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+func (s *MCPServer) handleListTasks(ctx context.Context, _ *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
 	s.logger.Debugf("Handling list_tasks request")
 
 	// Get all tasks
@@ -237,7 +237,7 @@ func (s *MCPServer) handleListTasks(_ *protocol.CallToolRequest) (*protocol.Call
 }
 
 // handleGetTask gets a specific task by ID
-func (s *MCPServer) handleGetTask(request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+func (s *MCPServer) handleGetTask(ctx context.Context, request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
 	// Extract task ID
 	taskID, err := extractTaskIDParam(request)
 	if err != nil {
@@ -256,7 +256,7 @@ func (s *MCPServer) handleGetTask(request *protocol.CallToolRequest) (*protocol.
 }
 
 // handleCreateTask adds a new scheduled task
-func (s *MCPServer) handleCreateTask(request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+func (s *MCPServer) handleCreateTask(ctx context.Context, request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
 	// Extract parameters
 	var params CreateTaskParams
 	if err := extractParams(request, &params); err != nil {
@@ -308,7 +308,7 @@ func createBaseTask(name, schedule, description string, enabled bool) *model.Tas
 }
 
 // handleRemoveTask removes a task
-func (s *MCPServer) handleRemoveTask(request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+func (s *MCPServer) handleRemoveTask(ctx context.Context, request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
 	// Extract task ID
 	taskID, err := extractTaskIDParam(request)
 	if err != nil {
@@ -326,7 +326,7 @@ func (s *MCPServer) handleRemoveTask(request *protocol.CallToolRequest) (*protoc
 }
 
 // handleEnableTask enables a task
-func (s *MCPServer) handleEnableTask(request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+func (s *MCPServer) handleEnableTask(ctx context.Context, request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
 	// Extract task ID
 	taskID, err := extractTaskIDParam(request)
 	if err != nil {
@@ -350,7 +350,7 @@ func (s *MCPServer) handleEnableTask(request *protocol.CallToolRequest) (*protoc
 }
 
 // handleDisableTask disables a task
-func (s *MCPServer) handleDisableTask(request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+func (s *MCPServer) handleDisableTask(ctx context.Context, request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
 	// Extract task ID
 	taskID, err := extractTaskIDParam(request)
 	if err != nil {

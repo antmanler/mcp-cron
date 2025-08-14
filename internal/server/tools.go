@@ -2,6 +2,8 @@
 package server
 
 import (
+	"context"
+
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/ThinkInAIXYZ/go-mcp/server"
 )
@@ -15,7 +17,7 @@ type ToolDefinition struct {
 	Description string
 
 	// Handler is the function that will be called when the tool is invoked
-	Handler func(*protocol.CallToolRequest) (*protocol.CallToolResult, error)
+	Handler func(context.Context, *protocol.CallToolRequest) (*protocol.CallToolResult, error)
 
 	// Parameters is the parameter schema for the tool (can be a struct)
 	Parameters interface{}
@@ -29,6 +31,24 @@ func (s *MCPServer) registerToolsDeclarative() {
 			Description: "Creates a scheduled task",
 			Handler:     s.handleCreateTask,
 			Parameters:  CreateTaskParams{},
+		},
+		{
+			Name:        "list_tasks",
+			Description: "Lists all scheduled tasks",
+			Handler:     s.handleListTasks,
+			Parameters:  struct{}{}, // No parameters for listing tasks
+		},
+		{
+			Name:        "get_task",
+			Description: "Gets a specific task by ID",
+			Handler:     s.handleGetTask,
+			Parameters:  TaskIDParams{},
+		},
+		{
+			Name:        "remove_task",
+			Description: "Removes a scheduled task",
+			Handler:     s.handleRemoveTask,
+			Parameters:  TaskIDParams{},
 		},
 	}
 

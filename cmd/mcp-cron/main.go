@@ -108,7 +108,7 @@ func applyCommandLineFlagsToConfig(cfg *config.Config) {
 
 // Application represents the running application
 type Application struct {
-	scheduler *scheduler.Scheduler
+	scheduler scheduler.Scheduler
 	server    *server.MCPServer
 	logger    *logging.Logger
 }
