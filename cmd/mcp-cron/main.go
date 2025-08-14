@@ -14,6 +14,7 @@ import (
 	"github.com/jolks/mcp-cron/internal/logging"
 	"github.com/jolks/mcp-cron/internal/scheduler"
 	"github.com/jolks/mcp-cron/internal/server"
+	"github.com/jolks/mcp-cron/internal/storage"
 )
 
 var (
@@ -26,6 +27,9 @@ var (
 	aiModel         = flag.String("ai-model", "", "AI model to use for AI tasks (default: gpt-4o)")
 	aiMaxIterations = flag.Int("ai-max-iterations", 0, "Maximum iterations for tool-enabled AI tasks (default: 20)")
 	mcpConfigPath   = flag.String("mcp-config-path", "", "Path to MCP configuration file (default: ~/.cursor/mcp.json)")
+	storageBackend  = flag.String("storage-backend", "", "Storage backend to use (default: json)")
+	storageJSONPath = flag.String("storage-json-path", "", "Path to JSON tasks file (default: ~/.mcp-cron/tasks.json)")
+	storageWatch    = flag.Bool("storage-watch", false, "Watch storage for changes and hot-reload (default: true)")
 )
 
 func main() {
@@ -104,6 +108,16 @@ func applyCommandLineFlagsToConfig(cfg *config.Config) {
 	if *mcpConfigPath != "" {
 		cfg.AI.MCPConfigFilePath = *mcpConfigPath
 	}
+	if *storageBackend != "" {
+		cfg.Storage.Backend = *storageBackend
+	}
+	if *storageJSONPath != "" {
+		cfg.Storage.JSONPath = *storageJSONPath
+	}
+	// only set if user passed the flag explicitly
+	if flag.Lookup("storage-watch").Value.String() != "false" || *storageWatch {
+		cfg.Storage.Watch = *storageWatch
+	}
 }
 
 // Application represents the running application
@@ -116,6 +130,21 @@ type Application struct {
 // createApp creates a new application instance
 func createApp(cfg *config.Config) (*Application, error) {
 	sched := scheduler.NewScheduler(&cfg.Scheduler)
+
+	// Initialize storage backend
+	switch cfg.Storage.Backend {
+	case "json", "":
+		// Create JSON storage
+		store, err := storage.NewJSONStorage(cfg.Storage.JSONPath)
+		if err != nil {
+			return nil, err
+		}
+		// If watch is disabled, we still pass the storage; the scheduler starts watching regardless and storage may no-op
+		_ = cfg.Storage.Watch
+		sched.SetStorage(store)
+	default:
+		// Fallback: no storage
+	}
 
 	mcpServer, err := server.NewMCPServer(cfg, sched)
 	if err != nil {

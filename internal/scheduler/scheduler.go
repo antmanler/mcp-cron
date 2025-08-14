@@ -10,6 +10,7 @@ import (
 	"github.com/jolks/mcp-cron/internal/config"
 	"github.com/jolks/mcp-cron/internal/errors"
 	"github.com/jolks/mcp-cron/internal/model"
+	"github.com/jolks/mcp-cron/internal/storage"
 	"github.com/robfig/cron/v3"
 )
 
@@ -21,6 +22,8 @@ type cronScheduler struct {
 	mu           sync.RWMutex
 	taskExecutor model.Executor
 	config       *config.SchedulerConfig
+	store        storage.Storage
+	cancelWatch  context.CancelFunc
 }
 
 // NewScheduler creates a new scheduler instance
@@ -47,6 +50,12 @@ func NewScheduler(cfg *config.SchedulerConfig) Scheduler {
 func (s *cronScheduler) Start(ctx context.Context) {
 	s.cron.Start()
 
+	// Initial load from storage if configured
+	s.loadFromStorage(ctx)
+
+	// Start watching storage for changes
+	s.startWatch(ctx)
+
 	// Listen for context cancellation to stop the scheduler
 	go func() {
 		<-ctx.Done()
@@ -61,6 +70,13 @@ func (s *cronScheduler) Start(ctx context.Context) {
 // Stop halts the scheduler
 func (s *cronScheduler) Stop() error {
 	s.cron.Stop()
+	// stop storage watch
+	if s.cancelWatch != nil {
+		s.cancelWatch()
+	}
+	if s.store != nil {
+		_ = s.store.Close()
+	}
 	return nil
 }
 
@@ -85,6 +101,9 @@ func (s *cronScheduler) AddTask(task *model.Task) error {
 		}
 	}
 
+	// Persist change
+	s.persistLocked()
+
 	return nil
 }
 
@@ -106,6 +125,9 @@ func (s *cronScheduler) RemoveTask(taskID string) error {
 
 	// Remove the task from our map
 	delete(s.tasks, taskID)
+
+	// Persist change
+	s.persistLocked()
 
 	return nil
 }
@@ -134,6 +156,9 @@ func (s *cronScheduler) EnableTask(taskID string) error {
 		return err
 	}
 
+	// Persist change
+	s.persistLocked()
+
 	return nil
 }
 
@@ -160,6 +185,8 @@ func (s *cronScheduler) DisableTask(taskID string) error {
 	task.Enabled = false
 	task.Status = model.StatusDisabled
 	task.UpdatedAt = time.Now()
+	// Persist change
+	s.persistLocked()
 	return nil
 }
 
@@ -216,6 +243,9 @@ func (s *cronScheduler) UpdateTask(task *model.Task) error {
 		return s.scheduleTask(task)
 	}
 
+	// Persist change
+	s.persistLocked()
+
 	return nil
 }
 
@@ -224,6 +254,13 @@ func (s *cronScheduler) SetTaskExecutor(executor model.Executor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.taskExecutor = executor
+}
+
+// SetStorage sets the storage backend and performs an initial load if scheduler already started later.
+func (s *cronScheduler) SetStorage(store storage.Storage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.store = store
 }
 
 // NewTask creates a new task with default values
@@ -287,4 +324,70 @@ func (s *cronScheduler) updateNextRunTime(task *model.Task) {
 			}
 		}
 	}
+}
+
+// persistLocked saves tasks to storage. Caller must hold s.mu for reading the map safely.
+func (s *cronScheduler) persistLocked() {
+	if s.store == nil {
+		return
+	}
+	tasks := make([]*model.Task, 0, len(s.tasks))
+	for _, t := range s.tasks {
+		// create shallow copy to avoid races
+		tt := *t
+		tasks = append(tasks, &tt)
+	}
+	go func(tasks []*model.Task) {
+		// background save; ignore context for now
+		_ = s.store.Save(context.Background(), tasks)
+	}(tasks)
+}
+
+// loadFromStorage loads tasks from storage and reconciles scheduler state.
+func (s *cronScheduler) loadFromStorage(ctx context.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.store == nil {
+		return
+	}
+	tasks, err := s.store.Load(ctx)
+	if err != nil {
+		fmt.Printf("failed to load tasks from storage: %v\n", err)
+		return
+	}
+	// Clear existing schedules and tasks, then rebuild from storage
+	for id, eid := range s.entryIDs {
+		s.cron.Remove(eid)
+		delete(s.entryIDs, id)
+	}
+	s.tasks = make(map[string]*model.Task)
+	for _, t := range tasks {
+		s.tasks[t.ID] = t
+		if t.Enabled {
+			if err := s.scheduleTask(t); err != nil {
+				fmt.Printf("failed to schedule loaded task %s: %v\n", t.ID, err)
+			}
+		}
+	}
+}
+
+// startWatch starts watching storage for changes if available and config indicates watch.
+func (s *cronScheduler) startWatch(parent context.Context) {
+	if s.store == nil {
+		return
+	}
+	// We always start watching; storage implementation may no-op. Higher-level enable via config handled by JSONStorage creation decision.
+	ctx, cancel := context.WithCancel(parent)
+	s.cancelWatch = cancel
+	ch, err := s.store.Watch(ctx)
+	if err != nil {
+		// if watcher cannot start, just ignore watching.
+		fmt.Printf("failed to start storage watcher: %v\n", err)
+		return
+	}
+	go func() {
+		for range ch {
+			s.loadFromStorage(context.Background())
+		}
+	}()
 }

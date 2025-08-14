@@ -10,6 +10,7 @@ import (
 
 	"github.com/jolks/mcp-cron/internal/config"
 	"github.com/jolks/mcp-cron/internal/model"
+	"github.com/jolks/mcp-cron/internal/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -61,6 +62,10 @@ func (m *MockScheduler) Stop() error {
 
 func (m *MockScheduler) SetTaskExecutor(executor model.Executor) {
 	m.Called(executor)
+}
+
+func (m *MockScheduler) SetStorage(store storage.Storage) {
+	m.Called(store)
 }
 
 // TestRegisterToolsDeclarative tests if tools are registered correctly

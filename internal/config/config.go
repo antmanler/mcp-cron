@@ -23,6 +23,9 @@ type Config struct {
 
 	// AI configuration
 	AI AIConfig
+
+	// Storage configuration
+	Storage StorageConfig
 }
 
 // ServerConfig holds server-specific configuration
@@ -47,6 +50,16 @@ type ServerConfig struct {
 type SchedulerConfig struct {
 	// Default task timeout
 	DefaultTimeout time.Duration
+}
+
+// StorageConfig holds storage backend configuration
+type StorageConfig struct {
+	// Backend type: json (only for now)
+	Backend string
+	// File path for JSON backend
+	JSONPath string
+	// Enable hot reload by watching the JSON file
+	Watch bool
 }
 
 // LoggingConfig holds logging-specific configuration
@@ -89,6 +102,11 @@ func DefaultConfig() *Config {
 		Scheduler: SchedulerConfig{
 			DefaultTimeout: 10 * time.Minute,
 		},
+		Storage: StorageConfig{
+			Backend:  "json",
+			JSONPath: filepath.Join(os.Getenv("HOME"), ".mcp-cron", "tasks.json"),
+			Watch:    true,
+		},
 		Logging: LoggingConfig{
 			Level:    "info",
 			FilePath: "",
@@ -130,6 +148,14 @@ func (c *Config) Validate() error {
 	// Validate AI config
 	if c.AI.MaxToolIterations < 1 {
 		return fmt.Errorf("max tool iterations must be at least 1")
+	}
+
+	// Validate storage config
+	switch strings.ToLower(c.Storage.Backend) {
+	case "json", "":
+		// ok
+	default:
+		return fmt.Errorf("unsupported storage backend: %s", c.Storage.Backend)
 	}
 
 	return nil
@@ -197,5 +223,16 @@ func FromEnv(config *Config) {
 
 	if val := os.Getenv("MCP_CRON_MCP_CONFIG_FILE_PATH"); val != "" {
 		config.AI.MCPConfigFilePath = val
+	}
+
+	// Storage configuration
+	if val := os.Getenv("MCP_CRON_STORAGE_BACKEND"); val != "" {
+		config.Storage.Backend = val
+	}
+	if val := os.Getenv("MCP_CRON_STORAGE_JSON_PATH"); val != "" {
+		config.Storage.JSONPath = val
+	}
+	if val := os.Getenv("MCP_CRON_STORAGE_WATCH"); val != "" {
+		config.Storage.Watch = strings.ToLower(val) == "true"
 	}
 }
