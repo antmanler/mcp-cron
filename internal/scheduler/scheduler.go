@@ -10,21 +10,24 @@ import (
 	"github.com/jolks/mcp-cron/internal/config"
 	"github.com/jolks/mcp-cron/internal/errors"
 	"github.com/jolks/mcp-cron/internal/model"
+	"github.com/jolks/mcp-cron/internal/storage"
 	"github.com/robfig/cron/v3"
 )
 
 // Scheduler manages cron tasks
-type Scheduler struct {
+type cronScheduler struct {
 	cron         *cron.Cron
 	tasks        map[string]*model.Task
 	entryIDs     map[string]cron.EntryID
 	mu           sync.RWMutex
 	taskExecutor model.Executor
 	config       *config.SchedulerConfig
+	store        storage.Storage
+	cancelWatch  context.CancelFunc
 }
 
 // NewScheduler creates a new scheduler instance
-func NewScheduler(cfg *config.SchedulerConfig) *Scheduler {
+func NewScheduler(cfg *config.SchedulerConfig) Scheduler {
 	cronOpts := cron.New(
 		cron.WithParser(cron.NewParser(
 			cron.SecondOptional|cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow|cron.Descriptor)),
@@ -33,7 +36,7 @@ func NewScheduler(cfg *config.SchedulerConfig) *Scheduler {
 		),
 	)
 
-	scheduler := &Scheduler{
+	scheduler := &cronScheduler{
 		cron:     cronOpts,
 		tasks:    make(map[string]*model.Task),
 		entryIDs: make(map[string]cron.EntryID),
@@ -44,8 +47,14 @@ func NewScheduler(cfg *config.SchedulerConfig) *Scheduler {
 }
 
 // Start begins the scheduler
-func (s *Scheduler) Start(ctx context.Context) {
+func (s *cronScheduler) Start(ctx context.Context) {
 	s.cron.Start()
+
+	// Initial load from storage if configured
+	s.loadFromStorage(ctx)
+
+	// Start watching storage for changes
+	s.startWatch(ctx)
 
 	// Listen for context cancellation to stop the scheduler
 	go func() {
@@ -59,13 +68,20 @@ func (s *Scheduler) Start(ctx context.Context) {
 }
 
 // Stop halts the scheduler
-func (s *Scheduler) Stop() error {
+func (s *cronScheduler) Stop() error {
 	s.cron.Stop()
+	// stop storage watch
+	if s.cancelWatch != nil {
+		s.cancelWatch()
+	}
+	if s.store != nil {
+		_ = s.store.Close()
+	}
 	return nil
 }
 
 // AddTask adds a new task to the scheduler
-func (s *Scheduler) AddTask(task *model.Task) error {
+func (s *cronScheduler) AddTask(task *model.Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -85,11 +101,14 @@ func (s *Scheduler) AddTask(task *model.Task) error {
 		}
 	}
 
+	// Persist change
+	s.persistLocked()
+
 	return nil
 }
 
 // RemoveTask removes a task from the scheduler
-func (s *Scheduler) RemoveTask(taskID string) error {
+func (s *cronScheduler) RemoveTask(taskID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -107,11 +126,14 @@ func (s *Scheduler) RemoveTask(taskID string) error {
 	// Remove the task from our map
 	delete(s.tasks, taskID)
 
+	// Persist change
+	s.persistLocked()
+
 	return nil
 }
 
 // EnableTask enables a disabled task
-func (s *Scheduler) EnableTask(taskID string) error {
+func (s *cronScheduler) EnableTask(taskID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -134,11 +156,14 @@ func (s *Scheduler) EnableTask(taskID string) error {
 		return err
 	}
 
+	// Persist change
+	s.persistLocked()
+
 	return nil
 }
 
 // DisableTask disables a running task
-func (s *Scheduler) DisableTask(taskID string) error {
+func (s *cronScheduler) DisableTask(taskID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -160,11 +185,13 @@ func (s *Scheduler) DisableTask(taskID string) error {
 	task.Enabled = false
 	task.Status = model.StatusDisabled
 	task.UpdatedAt = time.Now()
+	// Persist change
+	s.persistLocked()
 	return nil
 }
 
 // GetTask retrieves a task by ID
-func (s *Scheduler) GetTask(taskID string) (*model.Task, error) {
+func (s *cronScheduler) GetTask(taskID string) (*model.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -177,7 +204,7 @@ func (s *Scheduler) GetTask(taskID string) (*model.Task, error) {
 }
 
 // ListTasks returns all tasks
-func (s *Scheduler) ListTasks() []*model.Task {
+func (s *cronScheduler) ListTasks() []*model.Task {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -190,7 +217,7 @@ func (s *Scheduler) ListTasks() []*model.Task {
 }
 
 // UpdateTask updates an existing task
-func (s *Scheduler) UpdateTask(task *model.Task) error {
+func (s *cronScheduler) UpdateTask(task *model.Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -216,14 +243,24 @@ func (s *Scheduler) UpdateTask(task *model.Task) error {
 		return s.scheduleTask(task)
 	}
 
+	// Persist change
+	s.persistLocked()
+
 	return nil
 }
 
 // SetTaskExecutor sets the executor to be used for task execution
-func (s *Scheduler) SetTaskExecutor(executor model.Executor) {
+func (s *cronScheduler) SetTaskExecutor(executor model.Executor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.taskExecutor = executor
+}
+
+// SetStorage sets the storage backend and performs an initial load if scheduler already started later.
+func (s *cronScheduler) SetStorage(store storage.Storage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.store = store
 }
 
 // NewTask creates a new task with default values
@@ -238,7 +275,7 @@ func NewTask() *model.Task {
 }
 
 // scheduleTask adds a task to the cron scheduler (internal method)
-func (s *Scheduler) scheduleTask(task *model.Task) error {
+func (s *cronScheduler) scheduleTask(task *model.Task) error {
 	// Ensure we have a task executor
 	if s.taskExecutor == nil {
 		return fmt.Errorf("cannot schedule task: no task executor set")
@@ -277,7 +314,7 @@ func (s *Scheduler) scheduleTask(task *model.Task) error {
 }
 
 // updateNextRunTime updates the task's next run time based on its cron entry
-func (s *Scheduler) updateNextRunTime(task *model.Task) {
+func (s *cronScheduler) updateNextRunTime(task *model.Task) {
 	if entryID, exists := s.entryIDs[task.ID]; exists {
 		entries := s.cron.Entries()
 		for _, entry := range entries {
@@ -287,4 +324,70 @@ func (s *Scheduler) updateNextRunTime(task *model.Task) {
 			}
 		}
 	}
+}
+
+// persistLocked saves tasks to storage. Caller must hold s.mu for reading the map safely.
+func (s *cronScheduler) persistLocked() {
+	if s.store == nil {
+		return
+	}
+	tasks := make([]*model.Task, 0, len(s.tasks))
+	for _, t := range s.tasks {
+		// create shallow copy to avoid races
+		tt := *t
+		tasks = append(tasks, &tt)
+	}
+	go func(tasks []*model.Task) {
+		// background save; ignore context for now
+		_ = s.store.Save(context.Background(), tasks)
+	}(tasks)
+}
+
+// loadFromStorage loads tasks from storage and reconciles scheduler state.
+func (s *cronScheduler) loadFromStorage(ctx context.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.store == nil {
+		return
+	}
+	tasks, err := s.store.Load(ctx)
+	if err != nil {
+		fmt.Printf("failed to load tasks from storage: %v\n", err)
+		return
+	}
+	// Clear existing schedules and tasks, then rebuild from storage
+	for id, eid := range s.entryIDs {
+		s.cron.Remove(eid)
+		delete(s.entryIDs, id)
+	}
+	s.tasks = make(map[string]*model.Task)
+	for _, t := range tasks {
+		s.tasks[t.ID] = t
+		if t.Enabled {
+			if err := s.scheduleTask(t); err != nil {
+				fmt.Printf("failed to schedule loaded task %s: %v\n", t.ID, err)
+			}
+		}
+	}
+}
+
+// startWatch starts watching storage for changes if available and config indicates watch.
+func (s *cronScheduler) startWatch(parent context.Context) {
+	if s.store == nil {
+		return
+	}
+	// We always start watching; storage implementation may no-op. Higher-level enable via config handled by JSONStorage creation decision.
+	ctx, cancel := context.WithCancel(parent)
+	s.cancelWatch = cancel
+	ch, err := s.store.Watch(ctx)
+	if err != nil {
+		// if watcher cannot start, just ignore watching.
+		fmt.Printf("failed to start storage watcher: %v\n", err)
+		return
+	}
+	go func() {
+		for range ch {
+			s.loadFromStorage(context.Background())
+		}
+	}()
 }

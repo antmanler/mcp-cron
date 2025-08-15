@@ -1,0 +1,28 @@
+version: 2
+project_name: mcp-cron
+
+builds:
+  - id: mcp-cron
+    main: ./cmd/mcp-cron
+    binary: mcp-cron
+    env:
+      - CGO_ENABLED=0
+    targets:
+      - linux_amd64
+      - darwin_arm64
+
+archives:
+  - id: archive
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    builds:
+      - mcp-cron
+    format: tar.gz
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  use: github

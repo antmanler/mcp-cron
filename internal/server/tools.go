@@ -2,6 +2,8 @@
 package server
 
 import (
+	"context"
+
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/ThinkInAIXYZ/go-mcp/server"
 )
@@ -15,7 +17,7 @@ type ToolDefinition struct {
 	Description string
 
 	// Handler is the function that will be called when the tool is invoked
-	Handler func(*protocol.CallToolRequest) (*protocol.CallToolResult, error)
+	Handler func(context.Context, *protocol.CallToolRequest) (*protocol.CallToolResult, error)
 
 	// Parameters is the parameter schema for the tool (can be a struct)
 	Parameters interface{}
@@ -23,13 +25,18 @@ type ToolDefinition struct {
 
 // registerToolsDeclarative sets up all the MCP tools using a more declarative approach
 func (s *MCPServer) registerToolsDeclarative() {
-	// Define all the tools in one place
 	tools := []ToolDefinition{
 		{
+			Name:        "create_task",
+			Description: "Creates a scheduled task",
+			Handler:     s.handleCreateTask,
+			Parameters:  CreateTaskParams{},
+		},
+		{
 			Name:        "list_tasks",
-			Description: "Lists all scheduled tasks",
+			Description: "Lists scheduled tasks for a given session",
 			Handler:     s.handleListTasks,
-			Parameters:  struct{}{},
+			Parameters:  ListTasksParams{},
 		},
 		{
 			Name:        "get_task",
@@ -38,44 +45,25 @@ func (s *MCPServer) registerToolsDeclarative() {
 			Parameters:  TaskIDParams{},
 		},
 		{
-			Name:        "add_task",
-			Description: "Adds a new scheduled shell command task",
-			Handler:     s.handleAddTask,
-			Parameters:  TaskParams{},
-		},
-		{
-			Name:        "add_ai_task",
-			Description: "Adds a new scheduled AI (LLM) task. Use the 'prompt' field to directly specify what the AI should do.",
-			Handler:     s.handleAddAITask,
-			Parameters:  AITaskParams{},
-		},
-		{
-			Name:        "update_task",
-			Description: "Updates an existing task",
-			Handler:     s.handleUpdateTask,
-			Parameters:  AITaskParams{},
-		},
-		{
 			Name:        "remove_task",
-			Description: "Removes a task by ID",
+			Description: "Removes a scheduled task",
 			Handler:     s.handleRemoveTask,
 			Parameters:  TaskIDParams{},
 		},
 		{
 			Name:        "enable_task",
-			Description: "Enables a disabled task",
+			Description: "Enables a scheduled task",
 			Handler:     s.handleEnableTask,
 			Parameters:  TaskIDParams{},
 		},
 		{
 			Name:        "disable_task",
-			Description: "Disables an enabled task",
+			Description: "Disables a scheduled task",
 			Handler:     s.handleDisableTask,
 			Parameters:  TaskIDParams{},
 		},
 	}
 
-	// Register all the tools
 	for _, tool := range tools {
 		registerToolWithError(s.server, tool)
 	}

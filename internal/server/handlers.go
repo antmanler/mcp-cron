@@ -47,7 +47,7 @@ func createSuccessResponse(message string) (*protocol.CallToolResult, error) {
 
 	return &protocol.CallToolResult{
 		Content: []protocol.Content{
-			protocol.TextContent{
+			&protocol.TextContent{
 				Type: "text",
 				Text: string(responseJSON),
 			},
@@ -71,7 +71,7 @@ func createTaskResponse(task *model.Task) (*protocol.CallToolResult, error) {
 
 	return &protocol.CallToolResult{
 		Content: []protocol.Content{
-			protocol.TextContent{
+			&protocol.TextContent{
 				Type: "text",
 				Text: string(taskJSON),
 			},
@@ -88,7 +88,7 @@ func createTasksResponse(tasks []*model.Task) (*protocol.CallToolResult, error) 
 
 	return &protocol.CallToolResult{
 		Content: []protocol.Content{
-			protocol.TextContent{
+			&protocol.TextContent{
 				Type: "text",
 				Text: string(tasksJSON),
 			},
@@ -96,36 +96,10 @@ func createTasksResponse(tasks []*model.Task) (*protocol.CallToolResult, error) 
 	}, nil
 }
 
-// validateTaskParams validates the common task parameters
-func validateTaskParams(name, schedule string) error {
-	if name == "" || schedule == "" {
-		return errors.InvalidInput("missing required fields: name and schedule are required")
+// validateCreateTaskParams validates parameters for creating a task
+func validateCreateTaskParams(cron, name, instruction, sessionID string) error {
+	if cron == "" || name == "" || instruction == "" || sessionID == "" {
+		return errors.InvalidInput("missing required fields: cron, task_name, instruction and session_id are required")
 	}
-	return nil
-}
-
-// validateShellTaskParams validates the parameters specific to shell tasks
-func validateShellTaskParams(name, schedule, command string) error {
-	if err := validateTaskParams(name, schedule); err != nil {
-		return err
-	}
-
-	if command == "" {
-		return errors.InvalidInput("missing required field: command is required for shell tasks")
-	}
-
-	return nil
-}
-
-// validateAITaskParams validates the parameters specific to AI tasks
-func validateAITaskParams(name, schedule, prompt string) error {
-	if err := validateTaskParams(name, schedule); err != nil {
-		return err
-	}
-
-	if prompt == "" {
-		return errors.InvalidInput("missing required field: prompt is required for AI tasks")
-	}
-
 	return nil
 }
