@@ -19,12 +19,14 @@ import (
 )
 
 var (
+	// buildVersion is set at build time via -ldflags "-X main.buildVersion=<version>"
+	buildVersion    = "dev"
 	workDir         = flag.String("work-dir", "", "Working directory (default: ~/.mcp-cron)")
 	address         = flag.String("address", "", "The address to bind the server to")
 	port            = flag.Int("port", 0, "The port to bind the server to")
 	transport       = flag.String("transport", "", "Transport mode: sse or stdio")
 	logLevel        = flag.String("log-level", "", "Logging level: debug, info, warn, error, fatal")
-	version         = flag.Bool("version", false, "Show version information and exit")
+	showVersion     = flag.Bool("version", false, "Show version information and exit")
 	aiModel         = flag.String("ai-model", "", "AI model to use for AI tasks (default: gpt-4o)")
 	aiMaxIterations = flag.Int("ai-max-iterations", 0, "Maximum iterations for tool-enabled AI tasks (default: 20)")
 	mcpConfigPath   = flag.String("mcp-config-path", "", "Path to MCP configuration file (default: ~/.cursor/mcp.json)")
@@ -39,8 +41,13 @@ func main() {
 	// Load configuration
 	cfg := loadConfig()
 
+	// Fill in build version from ldflags if available
+	if buildVersion != "" {
+		cfg.Server.Version = buildVersion
+	}
+
 	// Show version and exit if requested
-	if *version {
+	if *showVersion {
 		log.Printf("%s version %s", cfg.Server.Name, cfg.Server.Version)
 		os.Exit(0)
 	}
