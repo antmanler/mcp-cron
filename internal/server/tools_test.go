@@ -132,3 +132,59 @@ func TestHandleCreateTask(t *testing.T) {
 	assert.Equal(t, params.Cron, responseTask.Schedule)
 	assert.Equal(t, params.Instruction, responseTask.Instruction)
 }
+
+// TestHandleListTasksRequiresSessionID ensures session_id is required
+func TestHandleListTasksRequiresSessionID(t *testing.T) {
+	mockScheduler := new(MockScheduler)
+	mockScheduler.On("SetTaskExecutor", mock.Anything).Return()
+
+	cfg := config.DefaultConfig()
+	mcpServer, err := NewMCPServer(cfg, mockScheduler)
+	assert.NoError(t, err)
+
+	// No session_id provided
+	request := &protocol.CallToolRequest{RawArguments: json.RawMessage(`{}`)}
+	res, err := mcpServer.handleListTasks(context.Background(), request)
+	assert.Nil(t, res)
+	assert.Error(t, err)
+}
+
+// TestHandleListTasksFiltersBySession ensures filtering works by session_id
+func TestHandleListTasksFiltersBySession(t *testing.T) {
+	mockScheduler := new(MockScheduler)
+	mockScheduler.On("SetTaskExecutor", mock.Anything).Return()
+
+	// Prepare tasks
+	tasks := []*model.Task{
+		{ID: "1", Name: "a", SessionID: "s1"},
+		{ID: "2", Name: "b", SessionID: "s2"},
+		{ID: "3", Name: "c", SessionID: "s1"},
+	}
+	mockScheduler.On("ListTasks").Return(tasks)
+
+	cfg := config.DefaultConfig()
+	mcpServer, err := NewMCPServer(cfg, mockScheduler)
+	assert.NoError(t, err)
+
+	// Provide session_id s1
+	raw, _ := json.Marshal(ListTasksParams{SessionID: "s1"})
+	request := &protocol.CallToolRequest{RawArguments: json.RawMessage(raw)}
+
+	res, err := mcpServer.handleListTasks(context.Background(), request)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	// Parse response
+	textContent, ok := res.Content[0].(*protocol.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent")
+	}
+	var got []*model.Task
+	err = json.Unmarshal([]byte(textContent.Text), &got)
+	assert.NoError(t, err)
+	assert.Len(t, got, 2)
+	// Ensure all have SessionID s1
+	for _, g := range got {
+		assert.Equal(t, "s1", g.SessionID)
+	}
+}

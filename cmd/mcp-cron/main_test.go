@@ -3,6 +3,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/jolks/mcp-cron/internal/config"
@@ -46,20 +47,21 @@ func TestApplyCommandLineFlagsToConfig(t *testing.T) {
 	cfg := config.DefaultConfig()
 
 	// Simulate setting command line flags
+	tmp := t.TempDir()
 	testAddress := "192.168.1.1"
 	testPort := 9090
 	testTransport := "stdio"
 	testLogLevel := "debug"
-	testLogFile := "/var/log/mcp-cron.log"
+	// log file now always set to work-dir/mcp-cron.log
 	testAiModel := "gpt-3.5-turbo"
 	testAiMaxIterations := 10
 	testMcpConfigPath := "/etc/mcp/config.json"
 
+	workDir = &tmp
 	address = &testAddress
 	port = &testPort
 	transport = &testTransport
 	logLevel = &testLogLevel
-	logFile = &testLogFile
 	aiModel = &testAiModel
 	aiMaxIterations = &testAiMaxIterations
 	mcpConfigPath = &testMcpConfigPath
@@ -78,8 +80,9 @@ func TestApplyCommandLineFlagsToConfig(t *testing.T) {
 	if cfg.Logging.Level != testLogLevel {
 		t.Errorf("expected log level %s, got %s", testLogLevel, cfg.Logging.Level)
 	}
-	if cfg.Logging.FilePath != testLogFile {
-		t.Errorf("expected log file %s, got %s", testLogFile, cfg.Logging.FilePath)
+	expectedLog := filepath.Join(tmp, "mcp-cron.log")
+	if cfg.Logging.FilePath != expectedLog {
+		t.Errorf("expected log file %s, got %s", expectedLog, cfg.Logging.FilePath)
 	}
 	if cfg.AI.Model != testAiModel {
 		t.Errorf("expected AI model %s, got %s", testAiModel, cfg.AI.Model)
@@ -100,6 +103,7 @@ func TestLoadConfig(t *testing.T) {
 	os.Setenv("MCP_CRON_LOGGING_LEVEL", "warn")
 
 	// Simulate setting command line flags (which should override env vars)
+	tmp := t.TempDir()
 	testAddress := "192.168.1.1"
 	testPort := 9090
 	testLogLevel := "debug"
@@ -109,9 +113,8 @@ func TestLoadConfig(t *testing.T) {
 	logLevel = &testLogLevel
 	// These are not set via env vars, so they should be applied from flags
 	testTransport := "stdio"
-	testLogFile := "/var/log/mcp-cron.log"
 	transport = &testTransport
-	logFile = &testLogFile
+	workDir = &tmp
 
 	cfg := loadConfig()
 
@@ -127,8 +130,9 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.Server.TransportMode != testTransport {
 		t.Errorf("expected transport mode %s, got %s", testTransport, cfg.Server.TransportMode)
 	}
-	if cfg.Logging.FilePath != testLogFile {
-		t.Errorf("expected log file %s, got %s", testLogFile, cfg.Logging.FilePath)
+	expectedLog := filepath.Join(tmp, "mcp-cron.log")
+	if cfg.Logging.FilePath != expectedLog {
+		t.Errorf("expected log file %s, got %s", expectedLog, cfg.Logging.FilePath)
 	}
 
 	// Clean up environment variables

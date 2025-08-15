@@ -34,9 +34,9 @@ func (s *MCPServer) registerToolsDeclarative() {
 		},
 		{
 			Name:        "list_tasks",
-			Description: "Lists all scheduled tasks",
+			Description: "Lists scheduled tasks for a given session",
 			Handler:     s.handleListTasks,
-			Parameters:  struct{}{}, // No parameters for listing tasks
+			Parameters:  ListTasksParams{},
 		},
 		{
 			Name:        "get_task",

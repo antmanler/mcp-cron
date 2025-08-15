@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -18,18 +19,18 @@ import (
 )
 
 var (
+	workDir         = flag.String("work-dir", "", "Working directory (default: ~/.mcp-cron)")
 	address         = flag.String("address", "", "The address to bind the server to")
 	port            = flag.Int("port", 0, "The port to bind the server to")
 	transport       = flag.String("transport", "", "Transport mode: sse or stdio")
 	logLevel        = flag.String("log-level", "", "Logging level: debug, info, warn, error, fatal")
-	logFile         = flag.String("log-file", "", "Log file path (default: stdout)")
 	version         = flag.Bool("version", false, "Show version information and exit")
 	aiModel         = flag.String("ai-model", "", "AI model to use for AI tasks (default: gpt-4o)")
 	aiMaxIterations = flag.Int("ai-max-iterations", 0, "Maximum iterations for tool-enabled AI tasks (default: 20)")
 	mcpConfigPath   = flag.String("mcp-config-path", "", "Path to MCP configuration file (default: ~/.cursor/mcp.json)")
 	storageBackend  = flag.String("storage-backend", "", "Storage backend to use (default: json)")
-	storageJSONPath = flag.String("storage-json-path", "", "Path to JSON tasks file (default: ~/.mcp-cron/tasks.json)")
-	storageWatch    = flag.Bool("storage-watch", false, "Watch storage for changes and hot-reload (default: true)")
+	// Deprecated flags removed: log-file, storage-json-path
+	storageWatch = flag.Bool("storage-watch", false, "Watch storage for changes and hot-reload (default: true)")
 )
 
 func main() {
@@ -84,6 +85,19 @@ func loadConfig() *config.Config {
 
 // applyCommandLineFlagsToConfig applies command line flags to the configuration
 func applyCommandLineFlagsToConfig(cfg *config.Config) {
+	// Determine work directory (default to ~/.mcp-cron)
+	wd := *workDir
+	if wd == "" {
+		home := os.Getenv("HOME")
+		if home == "" {
+			// Fallback to current directory if HOME is unset
+			home, _ = os.Getwd()
+		}
+		wd = filepath.Join(home, ".mcp-cron")
+	}
+	// Ensure work dir exists
+	_ = os.MkdirAll(wd, 0o755)
+
 	if *address != "" {
 		cfg.Server.Address = *address
 	}
@@ -96,9 +110,8 @@ func applyCommandLineFlagsToConfig(cfg *config.Config) {
 	if *logLevel != "" {
 		cfg.Logging.Level = *logLevel
 	}
-	if *logFile != "" {
-		cfg.Logging.FilePath = *logFile
-	}
+	// Always place logs in work-dir
+	cfg.Logging.FilePath = filepath.Join(wd, "mcp-cron.log")
 	if *aiModel != "" {
 		cfg.AI.Model = *aiModel
 	}
@@ -111,13 +124,14 @@ func applyCommandLineFlagsToConfig(cfg *config.Config) {
 	if *storageBackend != "" {
 		cfg.Storage.Backend = *storageBackend
 	}
-	if *storageJSONPath != "" {
-		cfg.Storage.JSONPath = *storageJSONPath
-	}
+	// Always place storage in work-dir
+	cfg.Storage.JSONPath = filepath.Join(wd, "tasks.json")
 	// only set if user passed the flag explicitly
 	if flag.Lookup("storage-watch").Value.String() != "false" || *storageWatch {
 		cfg.Storage.Watch = *storageWatch
 	}
+
+	// If transport is stdio, ensure file logging is enabled (already set above)
 }
 
 // Application represents the running application

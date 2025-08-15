@@ -38,6 +38,11 @@ type FileContextParam struct {
 	Description string `json:"description"`
 }
 
+// ListTasksParams defines parameters for listing tasks
+type ListTasksParams struct {
+	SessionID string `json:"session_id" description:"session id (chat id)"`
+}
+
 // CreateTaskParams defines parameters for creating a task
 type CreateTaskParams struct {
 	Cron                 string             `json:"cron" description:"cron expression"`
@@ -94,19 +99,22 @@ func NewMCPServer(cfg *config.Config, scheduler scheduler.Scheduler) (*MCPServer
 		// as it could interfere with JSON-RPC messages
 		// Redirect logs to a file instead of stdout
 
-		// Get the executable path
-		execPath, err := os.Executable()
-		if err != nil {
-			logger.Errorf("Failed to get executable path: %v", err)
-			execPath = cfg.Server.Name
+		// Prefer configured log file path (e.g., work-dir). Fallback to executable directory.
+		logPath := cfg.Logging.FilePath
+		if strings.TrimSpace(logPath) == "" {
+			// Get the executable path
+			execPath, err := os.Executable()
+			if err != nil {
+				logger.Errorf("Failed to get executable path: %v", err)
+				execPath = cfg.Server.Name
+			}
+			// Get the directory containing the executable
+			execDir := filepath.Dir(execPath)
+
+			// Set log path in the same directory as the executable
+			logFilename := fmt.Sprintf("%s.log", cfg.Server.Name)
+			logPath = filepath.Join(execDir, logFilename)
 		}
-
-		// Get the directory containing the executable
-		execDir := filepath.Dir(execPath)
-
-		// Set log path in the same directory as the executable
-		logFilename := fmt.Sprintf("%s.log", cfg.Server.Name)
-		logPath := filepath.Join(execDir, logFilename)
 
 		logFile, err := osOpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err == nil {
@@ -228,13 +236,28 @@ func (s *MCPServer) Stop() error {
 }
 
 // handleListTasks lists all tasks
-func (s *MCPServer) handleListTasks(ctx context.Context, _ *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
-	s.logger.Debugf("Handling list_tasks request")
+func (s *MCPServer) handleListTasks(ctx context.Context, request *protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+	// Extract parameters
+	var params ListTasksParams
+	if err := extractParams(request, &params); err != nil {
+		return createErrorResponse(err)
+	}
+	if strings.TrimSpace(params.SessionID) == "" {
+		return createErrorResponse(errors.InvalidInput("session_id is required"))
+	}
 
-	// Get all tasks
-	tasks := s.scheduler.ListTasks()
+	s.logger.Debugf("Handling list_tasks request for session %s", params.SessionID)
 
-	return createTasksResponse(tasks)
+	// Get all tasks then filter by session
+	all := s.scheduler.ListTasks()
+	filtered := make([]*model.Task, 0, len(all))
+	for _, t := range all {
+		if t != nil && t.SessionID == params.SessionID {
+			filtered = append(filtered, t)
+		}
+	}
+
+	return createTasksResponse(filtered)
 }
 
 // handleGetTask gets a specific task by ID
