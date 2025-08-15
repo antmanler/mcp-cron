@@ -37,7 +37,11 @@ func TestScheduler_PersistsOnMutations(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sched.Start(ctx)
-	defer sched.Stop()
+	defer func() {
+		if err := sched.Stop(); err != nil {
+			t.Fatalf("Stop: %v", err)
+		}
+	}()
 
 	// Add a task
 	task := &model.Task{ID: "t1", Name: "task1", Schedule: "* * * * *", Enabled: false}
@@ -94,7 +98,11 @@ func TestScheduler_ReloadsOnExternalChange(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sched.Start(ctx)
-	defer sched.Stop()
+	defer func() {
+		if err := sched.Stop(); err != nil {
+			t.Fatalf("Stop: %v", err)
+		}
+	}()
 
 	// Simulate external writer updating file
 	external := []*model.Task{

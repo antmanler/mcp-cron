@@ -50,6 +50,18 @@ func (s *MCPServer) registerToolsDeclarative() {
 			Handler:     s.handleRemoveTask,
 			Parameters:  TaskIDParams{},
 		},
+		{
+			Name:        "enable_task",
+			Description: "Enables a scheduled task",
+			Handler:     s.handleEnableTask,
+			Parameters:  TaskIDParams{},
+		},
+		{
+			Name:        "disable_task",
+			Description: "Disables a scheduled task",
+			Handler:     s.handleDisableTask,
+			Parameters:  TaskIDParams{},
+		},
 	}
 
 	for _, tool := range tools {
