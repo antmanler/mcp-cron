@@ -46,7 +46,7 @@ type ListTasksParams struct {
 // CreateTaskParams defines parameters for creating a task
 type CreateTaskParams struct {
 	Cron                 string             `json:"cron" description:"cron expression"`
-	TaskType             string             `json:"task_type,omitempty" description:"ONCE or PERIODICALLY"`
+	TaskType             string             `json:"task_type,omitempty" description:"ONCE or PERIODICALLY, default is ONCE, for periodic tasks task_type must be set to PERIODICALLY"`
 	TaskName             string             `json:"task_name" description:"task name"`
 	SessionID            string             `json:"session_id" description:"session id (chat id)"`
 	Instruction          string             `json:"instruction" description:"task instruction"`
