@@ -17,6 +17,7 @@ import (
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/ThinkInAIXYZ/go-mcp/server"
 	"github.com/ThinkInAIXYZ/go-mcp/transport"
+	"github.com/google/uuid"
 	"github.com/jolks/mcp-cron/internal/config"
 	"github.com/jolks/mcp-cron/internal/errors"
 	"github.com/jolks/mcp-cron/internal/logging"
@@ -294,7 +295,7 @@ func (s *MCPServer) handleCreateTask(ctx context.Context, request *protocol.Call
 
 	s.logger.Debugf("Handling create_task request for task %s", params.TaskName)
 
-	// Create task
+	// Create task. ID is always server-generated; user cannot set it.
 	task := createBaseTask(params.TaskName, params.Cron, "", true)
 	task.Instruction = params.Instruction
 	task.TaskType = params.TaskType
@@ -316,7 +317,7 @@ func (s *MCPServer) handleCreateTask(ctx context.Context, request *protocol.Call
 // createBaseTask creates a base task with common fields initialized
 func createBaseTask(name, schedule, description string, enabled bool) *model.Task {
 	now := time.Now()
-	taskID := fmt.Sprintf("task_%d", now.UnixNano())
+	taskID := uuid.NewString()
 
 	return &model.Task{
 		ID:          taskID,

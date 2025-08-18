@@ -21,6 +21,8 @@ const (
 	StatusFailed TaskStatus = "failed"
 	// StatusDisabled indicates a task that is disabled
 	StatusDisabled TaskStatus = "disabled"
+	// StatusDeleted indicates a task that has been soft-deleted
+	StatusDeleted TaskStatus = "deleted"
 )
 
 // String returns the string representation of the status, making it easier to use in string contexts
@@ -52,6 +54,11 @@ type Task struct {
 	Status               TaskStatus `json:"status"`
 	CreatedAt            time.Time  `json:"createdAt,omitempty"`
 	UpdatedAt            time.Time  `json:"updatedAt,omitempty"`
+	// Soft-delete flags and timestamp
+	Deleted   bool      `json:"deleted,omitempty"`
+	DeletedAt time.Time `json:"deletedAt,omitempty"`
+	// ExecutionLog keeps a bounded history of executions for this task
+	ExecutionLog []Result `json:"executionLog,omitempty"`
 }
 
 // Result contains the results of a task execution

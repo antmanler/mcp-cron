@@ -116,7 +116,7 @@ func TestExecuteRemovesOneTimeTask(t *testing.T) {
 	}
 
 	if _, err := sched.GetTask(task.ID); err == nil {
-		t.Fatalf("expected task to be removed after execution")
+		t.Fatalf("expected task to be soft-deleted (not retrievable) after execution")
 	}
 }
 

@@ -85,11 +85,22 @@ func (s *cronScheduler) AddTask(task *model.Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, exists := s.tasks[task.ID]; exists {
+	if task.ID == "" {
+		// Defensive: scheduler should not accept empty IDs; server generates IDs
+		return errors.InvalidInput("task ID must be set by server")
+	}
+
+	if existing, exists := s.tasks[task.ID]; exists {
+		// If an existing task (even deleted) has this ID, reject to avoid collisions/resurrection
+		if existing != nil {
+			return errors.AlreadyExists("task", task.ID)
+		}
 		return errors.AlreadyExists("task", task.ID)
 	}
 
 	// Store the task
+	task.Deleted = false
+	task.DeletedAt = time.Time{}
 	s.tasks[task.ID] = task
 
 	if task.Enabled {
@@ -112,7 +123,7 @@ func (s *cronScheduler) RemoveTask(taskID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, exists := s.tasks[taskID]
+	t, exists := s.tasks[taskID]
 	if !exists {
 		return errors.NotFound("task", taskID)
 	}
@@ -123,8 +134,13 @@ func (s *cronScheduler) RemoveTask(taskID string) error {
 		delete(s.entryIDs, taskID)
 	}
 
-	// Remove the task from our map
-	delete(s.tasks, taskID)
+	// Soft-delete: mark deleted but keep it for history
+	now := time.Now()
+	t.Enabled = false
+	t.Status = model.StatusDeleted
+	t.Deleted = true
+	t.DeletedAt = now
+	t.UpdatedAt = now
 
 	// Persist change
 	s.persistLocked()
@@ -200,6 +216,11 @@ func (s *cronScheduler) GetTask(taskID string) (*model.Task, error) {
 		return nil, errors.NotFound("task", taskID)
 	}
 
+	// Treat soft-deleted tasks as not found to consumers
+	if task.Deleted {
+		return nil, errors.NotFound("task", taskID)
+	}
+
 	return task, nil
 }
 
@@ -210,7 +231,9 @@ func (s *cronScheduler) ListTasks() []*model.Task {
 
 	tasks := make([]*model.Task, 0, len(s.tasks))
 	for _, task := range s.tasks {
-		tasks = append(tasks, task)
+		if task != nil && !task.Deleted {
+			tasks = append(tasks, task)
+		}
 	}
 
 	return tasks
@@ -223,6 +246,10 @@ func (s *cronScheduler) UpdateTask(task *model.Task) error {
 
 	existingTask, exists := s.tasks[task.ID]
 	if !exists {
+		return errors.NotFound("task", task.ID)
+	}
+
+	if existingTask.Deleted {
 		return errors.NotFound("task", task.ID)
 	}
 
@@ -282,22 +309,47 @@ func (s *cronScheduler) scheduleTask(task *model.Task) error {
 	}
 
 	// Create the job function that will execute when scheduled
+	const maxLogEntries = 50
 	jobFunc := func() {
-		task.LastRun = time.Now()
+		start := time.Now()
+		task.LastRun = start
 		task.Status = model.StatusRunning
 
 		// Execute the task
 		ctx := context.Background()
 		timeout := s.config.DefaultTimeout // Use the configured default timeout
 
-		if err := s.taskExecutor.Execute(ctx, task, timeout); err != nil {
+		execErr := s.taskExecutor.Execute(ctx, task, timeout)
+		if execErr != nil {
 			task.Status = model.StatusFailed
 		} else {
 			task.Status = model.StatusCompleted
 		}
 
-		task.UpdatedAt = time.Now()
+		end := time.Now()
+		task.UpdatedAt = end
+		// Append execution result
+		res := model.Result{
+			TaskID:    task.ID,
+			Output:    "",
+			Error:     "",
+			ExitCode:  0,
+			StartTime: start,
+			EndTime:   end,
+			Duration:  end.Sub(start).String(),
+		}
+		if execErr != nil {
+			res.Error = execErr.Error()
+			res.ExitCode = 1
+		}
+		task.ExecutionLog = append(task.ExecutionLog, res)
+		if len(task.ExecutionLog) > maxLogEntries {
+			// keep last maxLogEntries
+			task.ExecutionLog = task.ExecutionLog[len(task.ExecutionLog)-maxLogEntries:]
+		}
 		s.updateNextRunTime(task)
+		// Persist status and execution log
+		s.persistLocked()
 	}
 
 	// Add the job to cron
@@ -362,8 +414,25 @@ func (s *cronScheduler) loadFromStorage(ctx context.Context) {
 	}
 	s.tasks = make(map[string]*model.Task)
 	for _, t := range tasks {
+		if t == nil || t.ID == "" {
+			continue
+		}
+		if prev, ok := s.tasks[t.ID]; ok {
+			// keep the newer one by UpdatedAt (fallback to CreatedAt)
+			prevTime := prev.UpdatedAt
+			if prevTime.IsZero() {
+				prevTime = prev.CreatedAt
+			}
+			curTime := t.UpdatedAt
+			if curTime.IsZero() {
+				curTime = t.CreatedAt
+			}
+			if curTime.Before(prevTime) {
+				continue
+			}
+		}
 		s.tasks[t.ID] = t
-		if t.Enabled {
+		if t.Enabled && !t.Deleted {
 			if err := s.scheduleTask(t); err != nil {
 				fmt.Printf("failed to schedule loaded task %s: %v\n", t.ID, err)
 			}

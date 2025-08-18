@@ -65,7 +65,7 @@ func TestScheduler_PersistsOnMutations(t *testing.T) {
 		t.Fatalf("unexpected persisted tasks: %+v", tasks)
 	}
 
-	// Remove and ensure persisted update
+	// Remove (soft delete) and ensure persisted update
 	if err := sched.RemoveTask("t1"); err != nil {
 		t.Fatalf("RemoveTask: %v", err)
 	}
@@ -78,8 +78,8 @@ func TestScheduler_PersistsOnMutations(t *testing.T) {
 	if err := json.Unmarshal(b, &tasks); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if len(tasks) != 0 {
-		t.Fatalf("expected 0 tasks after removal, got %d", len(tasks))
+	if len(tasks) != 1 || !tasks[0].Deleted || tasks[0].Status != model.StatusDeleted {
+		t.Fatalf("expected soft-deleted task persisted with deleted=true, got: %+v", tasks)
 	}
 }
 
