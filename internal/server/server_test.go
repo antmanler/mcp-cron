@@ -46,8 +46,8 @@ func TestSendMessageToLocalServer(t *testing.T) {
 			t.Fatalf("unexpected path: %s", req.URL.Path)
 		}
 		q := req.URL.Query()
-		if got := q.Get("sender"); got != "runtime:cron_task" {
-			t.Fatalf("sender = %q, want runtime:cron_task", got)
+		if got := q.Get("sender"); got != "system_reminder" {
+			t.Fatalf("sender = %q, want system_reminder", got)
 		}
 		if got := q.Get("content"); got != "hello" {
 			t.Fatalf("content = %q, want hello", got)
@@ -153,5 +153,43 @@ func TestExecuteKeepsPeriodicTask(t *testing.T) {
 
 	if _, err := sched.GetTask(task.ID); err != nil {
 		t.Fatalf("expected task to remain after execution, got error: %v", err)
+	}
+}
+
+// TestSendMessageToLocalServerCustomSender verifies that the sender can be
+// configured via the MCP_CRON_SENDER environment variable.
+func TestSendMessageToLocalServerCustomSender(t *testing.T) {
+	received := make(chan *http.Request, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	u, err := urlpkg.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	host, port, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		t.Fatalf("split host port: %v", err)
+	}
+
+	t.Setenv("LOCAL_SERVER_PUBLIC_HOST", host)
+	t.Setenv("LOCAL_SERVER_PORT", port)
+	t.Setenv("MCP_CRON_SENDER", "custom_sender")
+
+	if err := sendMessageToLocalServer(context.Background(), "room1", "hello"); err != nil {
+		t.Fatalf("sendMessageToLocalServer returned error: %v", err)
+	}
+
+	select {
+	case req := <-received:
+		q := req.URL.Query()
+		if got := q.Get("sender"); got != "custom_sender" {
+			t.Fatalf("sender = %q, want custom_sender", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no request received")
 	}
 }
