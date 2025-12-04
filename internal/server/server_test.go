@@ -46,8 +46,8 @@ func TestSendMessageToLocalServer(t *testing.T) {
 			t.Fatalf("unexpected path: %s", req.URL.Path)
 		}
 		q := req.URL.Query()
-		if got := q.Get("sender"); got != "system_reminder" {
-			t.Fatalf("sender = %q, want system_reminder", got)
+		if got := q.Get("sender"); got != "runtime_reminder" {
+			t.Fatalf("sender = %q, want runtime_reminder", got)
 		}
 		if got := q.Get("content"); got != "hello" {
 			t.Fatalf("content = %q, want hello", got)

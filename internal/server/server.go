@@ -456,7 +456,7 @@ func sendMessageToLocalServer(ctx context.Context, chatID, content string) error
 
 	sender := os.Getenv("MCP_CRON_SENDER")
 	if sender == "" {
-		sender = "system_reminder"
+		sender = "runtime_reminder"
 	}
 
 	baseURL := fmt.Sprintf("http://%s:%d/room/%s/append", host, port, chatID)
