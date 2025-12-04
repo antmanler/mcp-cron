@@ -454,9 +454,14 @@ func sendMessageToLocalServer(ctx context.Context, chatID, content string) error
 		return fmt.Errorf("invalid LOCAL_SERVER_PORT: %w", err)
 	}
 
+	sender := os.Getenv("MCP_CRON_SENDER")
+	if sender == "" {
+		sender = "runtime_reminder"
+	}
+
 	baseURL := fmt.Sprintf("http://%s:%d/room/%s/append", host, port, chatID)
 	params := urlpkg.Values{}
-	params.Set("sender", "runtime:cron_task")
+	params.Set("sender", sender)
 	params.Set("content", content)
 	params.Set("tag", "reply")
 
